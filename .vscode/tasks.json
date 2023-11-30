@@ -1,0 +1,35 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build with Make",
+			"type": "shell",
+			"command": "make",
+			"problemMatcher": "$gcc",
+			"group": "build",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			}
+		},
+		{
+			"label": "make clean, make, and run",
+			"type": "shell",
+			"command": "make clean && make && ./build/macbootflash_test",
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"dependsOn": [
+				"Build with Make"
+			]
+		}
+
+	]
+}
