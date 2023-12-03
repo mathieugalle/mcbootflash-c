@@ -1,2 +1,7 @@
 # .vscode
 build
+
+mcbootflash
+*__pycache__
+
+.vscode/settings.json
