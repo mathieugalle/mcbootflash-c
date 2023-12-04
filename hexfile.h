@@ -31,7 +31,8 @@ public:
         const std::string &record,
         unsigned int &type_,
         unsigned int &address,
-        unsigned int &size, std::vector<uint8_t> &data);
+        unsigned int &size,
+        std::vector<uint8_t> &data);
 
     std::vector<Chunk> chunked(std::string hexfile, BootAttrs bootattrs);
 };

@@ -28,7 +28,7 @@ unsigned int HexFile::crc_ihex(const std::vector<uint8_t> &bytes)
         crc += byte;
     }
     crc &= 0xff;
-    crc = ((~crc + 1) & 0xff);
+    crc ^= 0xff;
     return crc;
 }
 
@@ -161,6 +161,60 @@ std::vector<Chunk> HexFile::chunked(std::string hexfile, BootAttrs bootattrs)
     return res;
 }
 
+TEST_CASE("crc_ihex check 1")
+{
+    HexFile hex;
+    // in python : "010203aaff"
+    std::vector<uint8_t> bytes{0x01, 0x02, 0x03, 0xAA, 0xFF};
+
+    unsigned int crc = hex.crc_ihex(bytes);
+    CHECK(crc == 80);
+}
+TEST_CASE("crc_ihex check 2")
+{
+    HexFile hex;
+    std::vector<uint8_t> bytes{67, 56, 89, 45};
+    unsigned int crc = hex.crc_ihex(bytes);
+    CHECK(crc == 254);
+}
+TEST_CASE("crc_ihex check 3")
+{
+    HexFile hex;
+    // "588405bc7be1f154bbab51427e254050425dcf55"
+    std::vector<uint8_t> bytes{0x58, 0x84, 0x05, 0xbc, 0x7b, 0xe1, 0xf1, 0x54, 0xbb, 0xab, 0x51, 0x42, 0x7e, 0x25, 0x40, 0x50, 0x42, 0x5d, 0xcf, 0x55};
+    unsigned int crc = hex.crc_ihex(bytes);
+    CHECK(crc == 210);
+}
+
+
+TEST_CASE("unpack_ihex check if IHEX_DATA")
+{
+    HexFile hex;
+    std::string record(":10000000E01A040000000000041A0000081A0000B2");
+    unsigned int type = 54;
+    unsigned int address = 0;
+    unsigned int size = 0;
+    std::vector<uint8_t> data;
+
+    hex.unpack_ihex(record, type, address, size, data);
+
+    CHECK(type == IHEX_DATA);
+}
+
+TEST_CASE("unpack_ihex check if IHEX_END_OF_FILE")
+{
+    HexFile hex;
+    std::string record(":00000001FF");
+    unsigned int type = 54;
+    unsigned int address = 0;
+    unsigned int size = 0;
+    std::vector<uint8_t> data;
+
+    hex.unpack_ihex(record, type, address, size, data);
+
+    CHECK(type == IHEX_END_OF_FILE);
+}
+
 TEST_CASE("chunked function")
 {
     std::string hexfile = "/home/yoctouser/mcbootflash-c/mcbootflash/tests/testcases/flash/test.hex";
@@ -185,6 +239,7 @@ TEST_CASE("chunked function")
         std::make_pair(6384, "01 00 70 00 c0 0a 88 00 00 80 fa 00 00 00 06 00 02 00 fa 00 00 0f 78 00 1e 00 78 00 00 40 78 00 67 40 60 00 00 80 fb 00 67 00 60 00 c2 0a 80 00 81 ff 2f 00 81 00 61 00 01 00 70 00 c0 0a 88 00 00 80 fa 00 00 00 06 00 00 00 fa 00 5b 01 a8 00 00 80 fa 00 00 00 06 00 06 00 fa 00 00 4f 78 00 11 47 98 00 12 07 98 00 23 07 98 00 1e 80 fb 00 a1 b9 26 00 00 80 40 00 10 40 78 00 00 74 a1 00 80 80 fb 00 f0 07 20 00 00 80 60 00 72 35 80 00 01 f8 2f 00 81 00 61 00 01 00 70 00 70 35 88 00 1e 40 90 00 00 80 fb 00 a1 b9 26 00 00 80 40 00 10 40 78 00 00 74 a1 00 80 80 fb 00 f0 07 20 00 00 80 60 00 82 35 80 00 01 f8 2f 00 81 00 61 00 01 00 70 00 80 35 88 00 30 48 07 00 93 48 07 00 f6 48 07 00 60 47 07 00 70 00 20 00 4e ff 07 00"),
         std::make_pair(6504, "70 00 20 00 71 ff 07 00 70 00 20 00 90 ff 07 00 70 00 20 00 b3 ff 07 00 64 ff 07 00 88 ff 07 00 a8 ff 07 00 cc ff 07 00 64 ff 07 00 a9 ff 07 00 1e 00 90 00 4f ff 07 00 1e 00 90 00 72 ff 07 00 2e 00 90 00 91 ff 07 00 2e 00 90 00 b4 ff 07 00 50 48 07 00 b3 48 07 00 16 49 07 00 80 47 07 00 00 80 fa 00 00 00 06 00 02 00 fa 00 fb 42 07 00 00 4f 78 00 05 4d 07 00 10 21 a8 00 1e 40 78 00 e4 4f 50 00 02 00 3a 00 b2 4b 07 00 16 41 07 00 1e 80 fb 00 a1 b9 26 00 00 80 40 00 10 40 78 00 00 74 a1 00 80 80 fb 00 f0 07 20 00 00 80 60 00 32 35 80 00 01 f8 2f 00 81 00 61 00 01 00 70 00 30 35 88 00 0b 4d 07 00 10 c0 b3 00 00 80 fa 00 00 00 06 00 00 00 fa 00 02 4d 07 00 06 43 07 00 10 c0 b3 00 00 80 fa 00 00 00 06 00 f0 3f b1 00"),
         std::make_pair(6624, "01 80 b1 00 06 00 35 00 ee 03 09 00 00 00 00 00 40 3f b1 00 01 80 b1 00 fb ff 3d 00 10 00 b0 00 20 3f b0 00 02 00 35 00 00 80 09 00 00 00 00 00 00 00 06 00 ff ff 37 00")};
+
     CHECK(chunks.size() == results.size());
 
     for (unsigned int i = 0; i < chunks.size(); i++)
