@@ -3,7 +3,10 @@ from __future__ import annotations
 
 from typing import Iterator
 
-import bincopy  # type: ignore[import-not-found]
+import importlib
+import _bincopy
+import _bincopy as bincopy # type: ignore[import-not-found]
+importlib.reload(_bincopy)
 
 from _types import BootAttrs, Chunk, Command
 
@@ -35,13 +38,18 @@ def chunked(
         If HEX file contains no data in program memory range.
     """
     hexdata = bincopy.BinFile()
-    hexdata.add_microchip_hex_file(hexfile)
+    with open(hexfile, 'r') as fin:
+        hexdata.add_microchip_hex(fin.read(), False)
 
+    debug_parsed_records = hexdata.debug_parsed_records
     
-    print("number of segments", len(hexdata.segments))
+    print("number of debug_parsed_records", len(debug_parsed_records))
 
-    print("first segment ", hexdata.segments[0])
-    print("second segment ", hexdata.segments[1])
+    print("first debug_parsed_records ", debug_parsed_records[0])
+    print("second debug_parsed_records ", debug_parsed_records[1])
+    print("n-th debug_parsed_records ", debug_parsed_records[127])
+
+    debug_parsed_records
 
     # print("42th segment ", hexdata._segments[42])
 
@@ -58,4 +66,4 @@ def chunked(
 
     total_bytes += (bootattrs.write_size - total_bytes) % bootattrs.write_size
     align = bootattrs.write_size // hexdata.word_size_bytes
-    return total_bytes, hexdata.segments.chunks(chunk_size, align, b"\x00\x00")
+    return total_bytes, hexdata.segments.chunks(chunk_size, align, b"\x00\x00"), debug_parsed_records

@@ -3,12 +3,18 @@
 
 #include "macbootflash-c.cpp"
 
-struct Segment
+class Segment
 {
+public:
     unsigned int minimum_address;
     unsigned int maximum_address;
     std::vector<uint8_t> data;
     unsigned int word_size_bytes;
+
+    Segment(unsigned int min_addr, unsigned int max_addr, std::vector<uint8_t> dat, unsigned int word_size);
+    bool operator==(const Segment &other) const;
+    unsigned int address() const;
+    void add_data(unsigned int min_addr, unsigned int max_addr, const std::vector<uint8_t> &new_data);
 };
 
 // Intel hex types.
@@ -23,8 +29,18 @@ std::string bytesToHexString(const std::vector<uint8_t> &bytes);
 
 class HexFile
 {
+private:
+    std::vector<Segment> segments;
+
+    unsigned int word_size_bytes;
+
+    
+    unsigned int execution_start_address;
 
 public:
+    std::vector<Segment> debug_segments;
+    
+    HexFile();
     unsigned int crc_ihex(const std::vector<uint8_t> &bytes);
 
     void unpack_ihex(
@@ -35,6 +51,8 @@ public:
         std::vector<uint8_t> &data);
 
     std::vector<Chunk> chunked(std::string hexfile, BootAttrs bootattrs);
+
+    void add_ihex(std::vector<std::string> records);
 };
 
 #endif /* HEXFILE_H */
