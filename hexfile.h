@@ -2,22 +2,8 @@
 #define HEXFILE_H
 
 #include "macbootflash-c.cpp"
+#include "segment.h"
 
-class Segment
-{
-public:
-    unsigned int minimum_address;
-    unsigned int maximum_address;
-    std::vector<uint8_t> data;
-    unsigned int word_size_bytes;
-
-    Segment(unsigned int min_addr, unsigned int max_addr, std::vector<uint8_t> dat, unsigned int word_size);
-    bool operator==(const Segment &other) const;
-    unsigned int address() const;
-    void add_data(unsigned int min_addr, unsigned int max_addr, const std::vector<uint8_t> &new_data);
-
-    bool remove_data(unsigned int new_min_address, unsigned int new_max_address, Segment &splitSegment);
-};
 
 // Intel hex types.
 #define IHEX_DATA 0

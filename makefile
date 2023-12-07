@@ -4,9 +4,9 @@ TARGET=build/macbootflash_test
 
 all: $(TARGET)
 
-$(TARGET): macbootflash-c.cpp hexfile.cpp
+$(TARGET): macbootflash-c.cpp hexfile.cpp segment.cpp
 	mkdir -p build
-	$(CXX) $(CXXFLAGS) -o $(TARGET) macbootflash-c.cpp hexfile.cpp
+	$(CXX) $(CXXFLAGS) -o $(TARGET) macbootflash-c.cpp hexfile.cpp segment.cpp
 
 clean:
 	rm -rf build
