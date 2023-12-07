@@ -30,15 +30,18 @@ std::string bytesToHexString(const std::vector<uint8_t> &bytes);
 class HexFile
 {
 private:
-    std::vector<Segment> segments;
+    int current_segment_index; //utilisé dans addSegment (en python Segments.add) pour l'insertion rapide
+    //int parce que prends la valeur -1 à l'initialisation
 
+    //I did not copy the "_current_segment" member in python, because I can get it by its index
     unsigned int word_size_bytes;
 
     
     unsigned int execution_start_address;
 
 public:
-    std::vector<Segment> debug_segments;
+    std::vector<Segment> debug_segments; //this works 
+    std::vector<Segment> segments;
     
     HexFile();
     unsigned int crc_ihex(const std::vector<uint8_t> &bytes);
@@ -50,6 +53,7 @@ public:
         unsigned int &size,
         std::vector<uint8_t> &data);
 
+    void addSegment(const Segment &seg);
     std::vector<Chunk> chunked(std::string hexfile, BootAttrs bootattrs);
 
     void add_ihex(std::vector<std::string> records);

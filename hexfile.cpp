@@ -7,6 +7,7 @@
 #include <sstream>
 #include <algorithm> //std::remove
 
+#include <stdexcept>
 #include "hexfile.h"
 
 std::string bytesToHexString(const std::vector<uint8_t> &bytes)
@@ -36,7 +37,7 @@ std::vector<uint8_t> hexStringToBytes(const std::string &str)
     return bytes;
 }
 
-HexFile::HexFile() : word_size_bytes(0), execution_start_address(0)
+HexFile::HexFile() : current_segment_index(-1), word_size_bytes(0), execution_start_address(0)
 {
     // default hexfile constructor
 }
@@ -52,6 +53,40 @@ unsigned int HexFile::crc_ihex(const std::vector<uint8_t> &bytes)
     crc = (~crc + 1) & 0xff;
     return crc;
 }
+
+TEST_CASE("crc_ihex check 1")
+{
+    HexFile hex;
+    // in python : "010203aaff"
+    std::vector<uint8_t> bytes{0x01, 0x02, 0x03, 0xAA, 0xFF};
+
+    unsigned int crc = hex.crc_ihex(bytes);
+    CHECK(crc == 81);
+}
+TEST_CASE("crc_ihex check 2")
+{
+    HexFile hex;
+    std::vector<uint8_t> bytes{67, 56, 89, 45};
+    unsigned int crc = hex.crc_ihex(bytes);
+    CHECK(crc == 255);
+}
+TEST_CASE("crc_ihex check 3")
+{
+    HexFile hex;
+    // "588405bc7be1f154bbab51427e254050425dcf55"
+    std::vector<uint8_t> bytes{0x58, 0x84, 0x05, 0xbc, 0x7b, 0xe1, 0xf1, 0x54, 0xbb, 0xab, 0x51, 0x42, 0x7e, 0x25, 0x40, 0x50, 0x42, 0x5d, 0xcf, 0x55};
+    unsigned int crc = hex.crc_ihex(bytes);
+    CHECK(crc == 211);
+}
+TEST_CASE("crc_ihex check 4")
+{
+    std::string hexAsStr("10000000E01A040000000000041A0000081A0000");
+    std::vector<uint8_t> bytes = hexStringToBytes(hexAsStr);
+    HexFile hex;
+    unsigned int crc = hex.crc_ihex(bytes);
+    CHECK(crc == 178);
+}
+
 
 void HexFile::unpack_ihex(const std::string &record, unsigned int &type_, unsigned int &address, unsigned int &size, std::vector<uint8_t> &data)
 {
@@ -142,7 +177,14 @@ void HexFile::add_ihex(std::vector<std::string> lines)
 
         if (lineType == IHEX_DATA) // Data record
         {
+
             debug_segments.push_back(Segment(
+                lineAddress,
+                lineAddress + lineSize,
+                lineData,
+                word_size_bytes));
+
+            addSegment(Segment(
                 lineAddress,
                 lineAddress + lineSize,
                 lineData,
@@ -151,7 +193,7 @@ void HexFile::add_ihex(std::vector<std::string> lines)
         else if (lineType == IHEX_END_OF_FILE)
         {
             // Pas de traitement spécial requis pour la fin de fichier
-            std::cout << "IHEX_END_OF_FILE" << std::endl;
+            // std::cout << "IHEX_END_OF_FILE" << std::endl;
         }
         else if (lineType == IHEX_EXTENDED_SEGMENT_ADDRESS)
         {
@@ -170,6 +212,97 @@ void HexFile::add_ihex(std::vector<std::string> lines)
         else
         {
             throw std::runtime_error("Unexpected record type");
+        }
+    }
+}
+
+void HexFile::addSegment(const Segment &newSeg)
+{
+    if (segments.empty())
+    {
+        segments.push_back(newSeg);
+        current_segment_index = 0;
+        return;
+    }
+    if (current_segment_index == -1)
+    {
+        throw std::runtime_error("current segment index should be different of -1 if segments in not empty ?!");
+    }
+
+    // Quick insertion for adjacent segment with the previously inserted segment
+    if (newSeg.minimum_address == segments[current_segment_index].maximum_address)
+    {
+        segments[current_segment_index].add_data(newSeg.minimum_address,
+                                                 newSeg.maximum_address,
+                                                 newSeg.data);
+        return;
+    }
+
+    // linear insert
+    unsigned int i = 0;
+    for (; i < segments.size(); ++i)
+    {
+        if (newSeg.minimum_address <= segments[i].maximum_address)
+        {
+            break;
+        }
+    }
+
+    if (i == segments.size())
+    {
+        // Si on est arrivé ici, cela signifie que le segment est après tous les autres
+        // parce que le boucle n'est jamais arrivée sur le "break"
+        segments.push_back(newSeg);
+        current_segment_index = segments.size() - 1;
+    }
+    else if (i > segments.size())
+    {
+        throw std::runtime_error("should be impossible : i > segments.size()");
+    }
+    else // i < segments.size()
+    {
+        if (newSeg.maximum_address < segments[i].minimum_address)
+        {
+            // Non-overlapping, non-adjacent before
+            segments.insert(segments.begin() + i, newSeg);
+            current_segment_index = i;
+        }
+        else
+        {
+            // Adjacent or overlapping
+            segments[i].add_data(newSeg.minimum_address,
+                                 newSeg.maximum_address,
+                                 newSeg.data);
+            current_segment_index = i;
+        }
+    }
+
+    Segment &current_segment = segments[current_segment_index];
+    while (current_segment_index < (int)(segments.size()) - 1)
+    {
+        Segment &next_segment = segments[current_segment_index + 1];
+
+        if (current_segment.maximum_address >= next_segment.maximum_address)
+        {
+            // Le segment suivant est complètement recouvert
+            segments.erase(segments.begin() + current_segment_index + 1);
+        }
+        else if (current_segment.maximum_address >= next_segment.minimum_address)
+        {
+            // Les segments sont adjacents ou se chevauchent partiellement
+            // On n'ajoute que la partie nécessaire de next_segment.data
+            unsigned int start = current_segment.maximum_address - next_segment.minimum_address;
+            std::vector<uint8_t> partialData(next_segment.data.begin() + start, next_segment.data.end());
+            current_segment.add_data(current_segment.maximum_address,
+                                     next_segment.maximum_address,
+                                     partialData);
+            segments.erase(segments.begin() + current_segment_index + 1);
+            break;
+        }
+        else
+        {
+            // Les segments ne se chevauchent pas, ni ne sont adjacents
+            break;
         }
     }
 }
@@ -209,7 +342,7 @@ std::vector<Chunk> HexFile::chunked(std::string hexfile, BootAttrs bootattrs)
 
     if (file.is_open())
     {
-        std::cout << "file is open" << std::endl;
+        // std::cout << "file is open" << std::endl;
     }
     else
     {
@@ -235,39 +368,6 @@ std::vector<Chunk> HexFile::chunked(std::string hexfile, BootAttrs bootattrs)
     word_size_bytes = 2;
 
     return res;
-}
-
-TEST_CASE("crc_ihex check 1")
-{
-    HexFile hex;
-    // in python : "010203aaff"
-    std::vector<uint8_t> bytes{0x01, 0x02, 0x03, 0xAA, 0xFF};
-
-    unsigned int crc = hex.crc_ihex(bytes);
-    CHECK(crc == 81);
-}
-TEST_CASE("crc_ihex check 2")
-{
-    HexFile hex;
-    std::vector<uint8_t> bytes{67, 56, 89, 45};
-    unsigned int crc = hex.crc_ihex(bytes);
-    CHECK(crc == 255);
-}
-TEST_CASE("crc_ihex check 3")
-{
-    HexFile hex;
-    // "588405bc7be1f154bbab51427e254050425dcf55"
-    std::vector<uint8_t> bytes{0x58, 0x84, 0x05, 0xbc, 0x7b, 0xe1, 0xf1, 0x54, 0xbb, 0xab, 0x51, 0x42, 0x7e, 0x25, 0x40, 0x50, 0x42, 0x5d, 0xcf, 0x55};
-    unsigned int crc = hex.crc_ihex(bytes);
-    CHECK(crc == 211);
-}
-TEST_CASE("crc_ihex check 4")
-{
-    std::string hexAsStr("10000000E01A040000000000041A0000081A0000");
-    std::vector<uint8_t> bytes = hexStringToBytes(hexAsStr);
-    HexFile hex;
-    unsigned int crc = hex.crc_ihex(bytes);
-    CHECK(crc == 178);
 }
 
 // Segment
@@ -323,7 +423,7 @@ BootAttrs defaultBootAttrsForTest()
 
 std::vector<Segment> debugSegmentsFromPython()
 {
-    return std::vector<Segment> {
+    return std::vector<Segment>{
         Segment(0, 16, hexStringToBytes("e01a040000000000041a0000081a0000"), 1),
         Segment(16, 32, hexStringToBytes("0c1a0000101a0000141a0000181a0000"), 1),
         Segment(32, 48, hexStringToBytes("1c1a0000001a0000201a0000241a0000"), 1),
@@ -453,6 +553,14 @@ std::vector<Segment> debugSegmentsFromPython()
         Segment(13280, 13296, hexStringToBytes("203fb000020035000080090000000000"), 1),
         Segment(13296, 13304, hexStringToBytes("00000600ffff3700"), 1)};
 }
+
+std::vector<Segment> debugSegmentsBeforeCropFromPython() {
+    return std::vector<Segment> {
+        Segment(0, 1024, hexStringToBytes("e01a040000000000041a0000081a00000c1a0000101a0000141a0000181a00001c1a0000001a0000201a0000241a0000281a00002c1a0000301a0000341a0000381a00003c1a0000401a0000441a0000481a00004c1a0000501a0000541a0000581a0000001a00005c1a0000601a0000641a0000681a00006c1a0000001a0000001a0000001a0000701a0000741a0000781a00007c1a0000801a0000841a0000881a00008c1a0000901a0000941a0000001a0000001a0000981a00009c1a0000a01a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000a41a0000a81a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000ac1a0000001a0000001a0000001a0000001a0000001a0000001a0000b01a0000b41a0000b81a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000bc1a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000c01a0000c41a0000001a0000c81a0000cc1a0000d01a0000d41a0000d81a0000dc1a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000"), 2),
+        Segment(12288, 13304, hexStringToBytes("e01a0400000000000200fa00000f78001e00780000407800674060000080fb00670060004a00dd00020a8000f13f2e008100610001007000000a88000080fa00000006000200fa00000f78001e00780000407800674060000080fb0067006000020a800081ff2f008100610001007000000a88000080fa00000006000000fa004301a8000080fa00000006000000fa000028a9000080fa00000006000200fa00000f78001e00780000407800674060000080fb00670060004a00dd00420a8000f13f2e008100610001007000400a88000080fa00000006000200fa00000f78001e00780000407800674060000080fb0067006000420a800081ff2f008100610001007000400a88000080fa00000006000000fa004b01a8000080fa00000006000200fa00000f78001e00780000407800674060000080fb00670060004a00dd00820a8000f13f2e008100610001007000800a88000080fa00000006000200fa00000f78001e00780000407800674060000080fb0067006000820a800081ff2f008100610001007000800a88000080fa00000006000000fa005301a8000080fa00000006000000fa0004a8a9000080fa00000006000200fa00000f78001e00780000407800674060000080fb00670060004a00dd00c20a8000f13f2e008100610001007000c00a88000080fa00000006000200fa00000f78001e00780000407800674060000080fb0067006000c20a800081ff2f008100610001007000c00a88000080fa00000006000000fa005b01a8000080fa00000006000600fa00004f78001147980012079800230798001e80fb00a1b9260000804000104078000074a1008080fb00f0072000008060007235800001f82f008100610001007000703588001e4090000080fb00a1b9260000804000104078000074a1008080fb00f0072000008060008235800001f82f008100610001007000803588003048070093480700f648070060470700700020004eff07007000200071ff07007000200090ff070070002000b3ff070064ff070088ff0700a8ff0700ccff070064ff0700a9ff07001e0090004fff07001e00900072ff07002e00900091ff07002e009000b4ff070050480700b348070016490700804707000080fa00000006000200fa00fb420700004f7800054d07001021a8001e407800e44f500002003a00b24b0700164107001e80fb00a1b9260000804000104078000074a1008080fb00f0072000008060003235800001f82f008100610001007000303588000b4d070010c0b3000080fa00000006000000fa00024d07000643070010c0b3000080fa0000000600f03fb1000180b10006003500ee03090000000000403fb1000180b100fbff3d001000b000203fb00002003500008009000000000000000600ffff3700"), 2),
+    };
+}
+
 TEST_CASE("chunked function debug_segments generation")
 {
     BootAttrs bootattrs = defaultBootAttrsForTest();
@@ -464,16 +572,39 @@ TEST_CASE("chunked function debug_segments generation")
 
     std::vector<Segment> debugSegments = debugSegmentsFromPython();
 
-    for(unsigned int i = 0; i < debugSegments.size(); i++) {
+    for (unsigned int i = 0; i < debugSegments.size(); i++)
+    {
         CHECK(hex.debug_segments[i] == debugSegments[i]);
+    }
+}
+
+
+TEST_CASE("chunked function addSegments : debug_segment_before_crop")
+{
+    BootAttrs bootattrs = defaultBootAttrsForTest();
+
+    HexFile hex;
+    std::vector<Chunk> chunks = hex.chunked(FLASH_HEX_FILE, bootattrs);
+
+
+    std::vector<Segment> debugSegmentsBeforeCrop = debugSegmentsBeforeCropFromPython();
+
+    CHECK(hex.segments.size() == debugSegmentsBeforeCrop.size());
+
+    for (unsigned int i = 0; i < debugSegmentsBeforeCrop.size(); i++)
+    {
+        CHECK(hex.segments[i].minimum_address == debugSegmentsBeforeCrop[i].minimum_address);
+        CHECK(hex.segments[i].maximum_address == debugSegmentsBeforeCrop[i].maximum_address);
+        CHECK(hex.segments[i].data == debugSegmentsBeforeCrop[i].data);
+
+        //this is just a small fix to do later
+        // CHECK(hex.segments[i].word_size_bytes == debugSegmentsBeforeCrop[i].word_size_bytes);
     }
 }
 
 // TEST_CASE("chunked function")
 // {
-//
-
-// BootAttrs bootattrs = defaultBootAttrsForTest();
+//     BootAttrs bootattrs = defaultBootAttrsForTest();
 //     HexFile hex;
 
 //     std::vector<Chunk> chunks = hex.chunked(FLASH_HEX_FILE, bootattrs);

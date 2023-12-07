@@ -49,12 +49,15 @@ def chunked(
     print("second debug_parsed_records ", debug_parsed_records[1])
     print("n-th debug_parsed_records ", debug_parsed_records[127])
 
-    debug_parsed_records
-
     # print("42th segment ", hexdata._segments[42])
 
+    debug_segments_before_crop = [bincopy.Segment(s.minimum_address, s.maximum_address, s.data.copy(), s.word_size_bytes) for s in hexdata.segments._list]
+
+    print("debug_segments_before_crop len : ", len(debug_segments_before_crop))
 
     hexdata.crop(*bootattrs.memory_range)
+
+
     chunk_size = bootattrs.max_packet_length - Command.get_size()
     chunk_size -= chunk_size % bootattrs.write_size
     chunk_size //= hexdata.word_size_bytes
@@ -66,4 +69,4 @@ def chunked(
 
     total_bytes += (bootattrs.write_size - total_bytes) % bootattrs.write_size
     align = bootattrs.write_size // hexdata.word_size_bytes
-    return total_bytes, hexdata.segments.chunks(chunk_size, align, b"\x00\x00"), debug_parsed_records
+    return total_bytes, hexdata.segments.chunks(chunk_size, align, b"\x00\x00"), debug_parsed_records, debug_segments_before_crop

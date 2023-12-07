@@ -450,63 +450,66 @@ class Segments:
 
         return self._list[-1].maximum_address
 
-    def add(self, segment, overwrite=False):
+    def add(self, newSegment, overwrite=False):
         """Add segments by ascending address.
 
         """
 
         if self._list:
-            if segment.minimum_address == self._current_segment.maximum_address:
+            if newSegment.minimum_address == self._current_segment.maximum_address:
                 # Fast insertion for adjacent segments.
-                self._current_segment.add_data(segment.minimum_address,
-                                               segment.maximum_address,
-                                               segment.data,
+                self._current_segment.add_data(newSegment.minimum_address,
+                                               newSegment.maximum_address,
+                                               newSegment.data,
                                                overwrite)
             else:
                 # Linear insert.
-                for i, s in enumerate(self._list):
-                    if segment.minimum_address <= s.maximum_address:
+                for iOldSegment, oldSegment in enumerate(self._list):
+                    if newSegment.minimum_address <= oldSegment.maximum_address:
                         break
 
-                if segment.minimum_address > s.maximum_address:
-                    # Non-overlapping, non-adjacent after.
-                    self._list.append(segment)
-                elif segment.maximum_address < s.minimum_address:
-                    # Non-overlapping, non-adjacent before.
-                    self._list.insert(i, segment)
-                else:
-                    # Adjacent or overlapping.
-                    s.add_data(segment.minimum_address,
-                               segment.maximum_address,
-                               segment.data,
-                               overwrite)
-                    segment = s
+                # segment est overlapping avec (s,i), bien avant, ou bien adjacent
 
-                self._current_segment = segment
-                self._current_segment_index = i
+                if newSegment.minimum_address > oldSegment.maximum_address:
+                    # Non-overlapping, non-adjacent after.
+                    # POURQUOI on insère à la fin de la liste et pas à cet endroit ?
+                    self._list.append(newSegment)
+                elif newSegment.maximum_address < oldSegment.minimum_address:
+                    # Non-overlapping, non-adjacent before.
+                    self._list.insert(iOldSegment, newSegment)
+                else: # ni totalement avant, ni totalement après
+                    # Adjacent or overlapping.
+                    oldSegment.add_data(newSegment.minimum_address,
+                               newSegment.maximum_address,
+                               newSegment.data,
+                               overwrite)
+                    newSegment = oldSegment
+
+                self._current_segment = newSegment
+                self._current_segment_index = iOldSegment
 
             # Remove overwritten and merge adjacent segments.
             while self._current_segment is not self._list[-1]:
-                s = self._list[self._current_segment_index + 1]
+                oldSegment = self._list[self._current_segment_index + 1]
 
-                if self._current_segment.maximum_address >= s.maximum_address:
+                if self._current_segment.maximum_address >= oldSegment.maximum_address:
                     # The whole segment is overwritten.
                     del self._list[self._current_segment_index + 1]
-                elif self._current_segment.maximum_address >= s.minimum_address:
+                elif self._current_segment.maximum_address >= oldSegment.minimum_address:
                     # Adjacent or beginning of the segment overwritten.
                     self._current_segment.add_data(
                         self._current_segment.maximum_address,
-                        s.maximum_address,
-                        s.data[self._current_segment.maximum_address - s.minimum_address:],
+                        oldSegment.maximum_address,
+                        oldSegment.data[self._current_segment.maximum_address - oldSegment.minimum_address:],
                         overwrite=False)
-                    del self._list[self._current_segment_index+1]
+                    del self._list[self._current_segment_index + 1]
                     break
                 else:
                     # Segments are not overlapping, nor adjacent.
                     break
         else:
-            self._list.append(segment)
-            self._current_segment = segment
+            self._list.append(newSegment)
+            self._current_segment = newSegment
             self._current_segment_index = 0
 
     def remove(self, minimum_address, maximum_address):
@@ -1600,33 +1603,6 @@ def _do_convert_as(bf, output_format):
 
     return converted
 
-
-def _do_convert(args):
-    input_formats_missing = len(args.infiles) - len(args.input_format)
-
-    if input_formats_missing < 0:
-        sys.exit("found more input formats than input files")
-
-    args.input_format += input_formats_missing * [('auto', tuple())]
-    binfile = BinFile(word_size_bits=args.word_size_bits)
-
-    for input_format, infile in zip(args.input_format, args.infiles):
-        _do_convert_add_file(binfile, input_format, infile, args.overwrite)
-
-    converted = _do_convert_as(binfile, args.output_format)
-
-    if args.outfile == '-':
-        if isinstance(converted, str):
-            print(converted, end='')
-        else:
-            sys.stdout.buffer.write(converted)
-    else:
-        if isinstance(converted, str):
-            with open(args.outfile, 'w') as fout:
-                fout.write(converted)
-        else:
-            with open(args.outfile, 'wb') as fout:
-                fout.write(converted)
 
 
 def _do_pretty(args):
