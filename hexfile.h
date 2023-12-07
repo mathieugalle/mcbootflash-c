@@ -15,6 +15,8 @@ public:
     bool operator==(const Segment &other) const;
     unsigned int address() const;
     void add_data(unsigned int min_addr, unsigned int max_addr, const std::vector<uint8_t> &new_data);
+
+    bool remove_data(unsigned int new_min_address, unsigned int new_max_address, Segment &splitSegment);
 };
 
 // Intel hex types.
@@ -40,7 +42,7 @@ private:
     unsigned int execution_start_address;
 
 public:
-    std::vector<Segment> debug_segments; //this works 
+    std::vector<Segment> debug_segments; //this works
     std::vector<Segment> segments;
     
     HexFile();
@@ -54,6 +56,11 @@ public:
         std::vector<uint8_t> &data);
 
     void addSegment(const Segment &seg);
+    void crop(unsigned int minimum_address, unsigned int maximum_address);
+    unsigned int getMaximumAdressOfLastSegment();
+    void removeSegmentsBetween(unsigned int minimum_address, unsigned int maximum_address);
+
+
     std::vector<Chunk> chunked(std::string hexfile, BootAttrs bootattrs);
 
     void add_ihex(std::vector<std::string> records);

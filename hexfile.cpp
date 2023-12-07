@@ -87,7 +87,6 @@ TEST_CASE("crc_ihex check 4")
     CHECK(crc == 178);
 }
 
-
 void HexFile::unpack_ihex(const std::string &record, unsigned int &type_, unsigned int &address, unsigned int &size, std::vector<uint8_t> &data)
 {
     if (record.length() < 11 || record[0] != ':')
@@ -307,6 +306,61 @@ void HexFile::addSegment(const Segment &newSeg)
     }
 }
 
+unsigned int HexFile::getMaximumAdressOfLastSegment()
+{
+    if (segments.size() == 0)
+    {
+        throw std::runtime_error("no segments to get maximum adress from");
+    }
+    else
+    {
+        return segments[segments.size() - 1].maximum_address;
+    }
+}
+
+/// @brief Keep given range and discard the rest.
+/// @param minimum_address is the first word address to keep (including)
+/// @param maximum_address is the last word address to keep (excluding).
+void HexFile::crop(unsigned int minimum_address, unsigned int maximum_address)
+{
+    // Ajuster les adresses en fonction de word_size_bytes
+    minimum_address *= word_size_bytes;
+    maximum_address *= word_size_bytes;
+    unsigned int current_address_address = getMaximumAdressOfLastSegment();
+
+    removeSegmentsBetween(0, minimum_address);
+    removeSegmentsBetween(maximum_address, current_address_address);
+}
+
+// same as     def remove(self, minimum_address, maximum_address):
+void HexFile::removeSegmentsBetween(unsigned int minimum_address, unsigned int maximum_address)
+{
+    // Nouvelle liste pour stocker les segments modifiés
+    std::vector<Segment> new_segments;
+    for (unsigned int i = 0; i < segments.size(); i++)
+    {
+        Segment &segment = segments[i];
+        // Appliquer remove_data sur chaque segment
+
+        Segment split(0, 0, {}, 0);
+        bool isSplitted = segment.remove_data(minimum_address, maximum_address, split);
+
+        // Ajouter le segment s'il a toujours des données valides
+        if (segment.minimum_address < segment.maximum_address)
+        {
+            new_segments.push_back(segment);
+        }
+
+        // Ajouter le segment split s'il existe et est différent du segment actuel
+        if (isSplitted)
+        {
+            new_segments.push_back(split);
+        }
+    }
+    // Mettre à jour la liste des segments
+    segments = new_segments;
+}
+
 // Vire les espaces au début et à la fin
 std::string strip(const std::string &str)
 {
@@ -365,7 +419,28 @@ std::vector<Chunk> HexFile::chunked(std::string hexfile, BootAttrs bootattrs)
 
     add_ihex(lines);
 
+    // crop(bootattrs.memory_start, bootattrs.memory_end);
+
+    //     hexdata.crop(*bootattrs.memory_range)
+
+    // chunk_size = bootattrs.max_packet_length - Command.get_size()
+    // chunk_size -= chunk_size % bootattrs.write_size
+    // chunk_size //= hexdata.word_size_bytes
+    // total_bytes = len(hexdata) * hexdata.word_size_bytes
+
+    // if total_bytes == 0:
+    //     msg = "HEX file contains no data within program memory range"
+    //     raise ValueError(msg)
+
+    // total_bytes += (bootattrs.write_size - total_bytes) % bootattrs.write_size
+    // align = bootattrs.write_size // hexdata.word_size_bytes
+    // return total_bytes, hexdata.segments.chunks(chunk_size, align, b"\x00\x00"), debug_parsed_records, debug_segments_before_crop
+
     word_size_bytes = 2;
+    for (unsigned int i = 0; i < segments.size(); i++)
+    {
+        segments[i].word_size_bytes = 2;
+    }
 
     return res;
 }
@@ -404,6 +479,64 @@ void Segment::add_data(unsigned int min_addr, unsigned int max_addr, const std::
     {
         throw std::runtime_error("data added to a segment must be adjacent to the original segment data");
     }
+}
+
+bool Segment::remove_data(unsigned int new_min_address, unsigned int new_max_address, Segment &splitSegment)
+{
+    // Vérification des plages d'adresses
+    if ((new_min_address >= maximum_address) || (new_max_address <= minimum_address))
+    {
+        return false; // TODO : vérifier que la plage est exclue dans ce cas ?!
+    }
+
+    // Ajustement des adresses
+    if (new_min_address < minimum_address)
+        new_min_address = minimum_address;
+
+    if (new_max_address > maximum_address)
+        new_max_address = maximum_address;
+
+    unsigned int remove_size = new_max_address - new_min_address;
+    unsigned int part1_size = new_min_address - minimum_address;
+    std::vector<uint8_t> part1_data(data.begin(), data.begin() + part1_size);
+    std::vector<uint8_t> part2_data(data.begin() + part1_size + remove_size, data.end());
+
+    bool isSplitted = false;
+
+    if (!part1_data.empty() && !part2_data.empty())
+    {
+        // Mise à jour de ce segment et définition du segment divisé
+        maximum_address = new_min_address + part1_size;
+        data = part1_data;
+
+        splitSegment = Segment(
+            new_max_address, 
+            maximum_address + part2_data.size(), 
+            part2_data, 
+            word_size_bytes);
+        isSplitted = true;
+    }
+    else
+    {
+        // Mise à jour de ce segment uniquement
+        if (!part1_data.empty())
+        {
+            maximum_address = new_min_address;
+            data = part1_data;
+        }
+        else if (!part2_data.empty())
+        {
+            minimum_address = new_max_address;
+            data = part2_data;
+        }
+        else
+        {
+            maximum_address = minimum_address;
+            data.clear();
+        }
+    }
+
+    return isSplitted;
 }
 
 #define FLASH_HEX_FILE "/home/yoctouser/mcbootflash-c/mcbootflash/tests/testcases/flash/test.hex"
@@ -554,8 +687,9 @@ std::vector<Segment> debugSegmentsFromPython()
         Segment(13296, 13304, hexStringToBytes("00000600ffff3700"), 1)};
 }
 
-std::vector<Segment> debugSegmentsBeforeCropFromPython() {
-    return std::vector<Segment> {
+std::vector<Segment> debugSegmentsBeforeCropFromPython()
+{
+    return std::vector<Segment>{
         Segment(0, 1024, hexStringToBytes("e01a040000000000041a0000081a00000c1a0000101a0000141a0000181a00001c1a0000001a0000201a0000241a0000281a00002c1a0000301a0000341a0000381a00003c1a0000401a0000441a0000481a00004c1a0000501a0000541a0000581a0000001a00005c1a0000601a0000641a0000681a00006c1a0000001a0000001a0000001a0000701a0000741a0000781a00007c1a0000801a0000841a0000881a00008c1a0000901a0000941a0000001a0000001a0000981a00009c1a0000a01a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000a41a0000a81a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000ac1a0000001a0000001a0000001a0000001a0000001a0000001a0000b01a0000b41a0000b81a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000bc1a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000c01a0000c41a0000001a0000c81a0000cc1a0000d01a0000d41a0000d81a0000dc1a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000001a0000"), 2),
         Segment(12288, 13304, hexStringToBytes("e01a0400000000000200fa00000f78001e00780000407800674060000080fb00670060004a00dd00020a8000f13f2e008100610001007000000a88000080fa00000006000200fa00000f78001e00780000407800674060000080fb0067006000020a800081ff2f008100610001007000000a88000080fa00000006000000fa004301a8000080fa00000006000000fa000028a9000080fa00000006000200fa00000f78001e00780000407800674060000080fb00670060004a00dd00420a8000f13f2e008100610001007000400a88000080fa00000006000200fa00000f78001e00780000407800674060000080fb0067006000420a800081ff2f008100610001007000400a88000080fa00000006000000fa004b01a8000080fa00000006000200fa00000f78001e00780000407800674060000080fb00670060004a00dd00820a8000f13f2e008100610001007000800a88000080fa00000006000200fa00000f78001e00780000407800674060000080fb0067006000820a800081ff2f008100610001007000800a88000080fa00000006000000fa005301a8000080fa00000006000000fa0004a8a9000080fa00000006000200fa00000f78001e00780000407800674060000080fb00670060004a00dd00c20a8000f13f2e008100610001007000c00a88000080fa00000006000200fa00000f78001e00780000407800674060000080fb0067006000c20a800081ff2f008100610001007000c00a88000080fa00000006000000fa005b01a8000080fa00000006000600fa00004f78001147980012079800230798001e80fb00a1b9260000804000104078000074a1008080fb00f0072000008060007235800001f82f008100610001007000703588001e4090000080fb00a1b9260000804000104078000074a1008080fb00f0072000008060008235800001f82f008100610001007000803588003048070093480700f648070060470700700020004eff07007000200071ff07007000200090ff070070002000b3ff070064ff070088ff0700a8ff0700ccff070064ff0700a9ff07001e0090004fff07001e00900072ff07002e00900091ff07002e009000b4ff070050480700b348070016490700804707000080fa00000006000200fa00fb420700004f7800054d07001021a8001e407800e44f500002003a00b24b0700164107001e80fb00a1b9260000804000104078000074a1008080fb00f0072000008060003235800001f82f008100610001007000303588000b4d070010c0b3000080fa00000006000000fa00024d07000643070010c0b3000080fa0000000600f03fb1000180b10006003500ee03090000000000403fb1000180b100fbff3d001000b000203fb00002003500008009000000000000000600ffff3700"), 2),
     };
@@ -578,14 +712,12 @@ TEST_CASE("chunked function debug_segments generation")
     }
 }
 
-
 TEST_CASE("chunked function addSegments : debug_segment_before_crop")
 {
     BootAttrs bootattrs = defaultBootAttrsForTest();
 
     HexFile hex;
     std::vector<Chunk> chunks = hex.chunked(FLASH_HEX_FILE, bootattrs);
-
 
     std::vector<Segment> debugSegmentsBeforeCrop = debugSegmentsBeforeCropFromPython();
 
@@ -596,9 +728,7 @@ TEST_CASE("chunked function addSegments : debug_segment_before_crop")
         CHECK(hex.segments[i].minimum_address == debugSegmentsBeforeCrop[i].minimum_address);
         CHECK(hex.segments[i].maximum_address == debugSegmentsBeforeCrop[i].maximum_address);
         CHECK(hex.segments[i].data == debugSegmentsBeforeCrop[i].data);
-
-        //this is just a small fix to do later
-        // CHECK(hex.segments[i].word_size_bytes == debugSegmentsBeforeCrop[i].word_size_bytes);
+        CHECK(hex.segments[i].word_size_bytes == debugSegmentsBeforeCrop[i].word_size_bytes);
     }
 }
 

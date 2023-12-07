@@ -328,25 +328,25 @@ class Segment:
                 'data added to a segment must be adjacent to or overlapping '
                 'with the original segment data')
 
-# pas fait
-    def remove_data(self, minimum_address, maximum_address):
+# fait
+    def remove_data(self, new_min_address, new_max_address):
         """Remove given data range from this segment. Returns the second
         segment if the removed data splits this segment in two.
 
         """
 
-        if ((minimum_address >= self.maximum_address)
-            or (maximum_address <= self.minimum_address)):
+        if ((new_min_address >= self.maximum_address)
+            or (new_max_address <= self.minimum_address)):
             return
 
-        if minimum_address < self.minimum_address:
-            minimum_address = self.minimum_address
+        if new_min_address < self.minimum_address:
+            new_min_address = self.minimum_address
 
-        if maximum_address > self.maximum_address:
-            maximum_address = self.maximum_address
+        if new_max_address > self.maximum_address:
+            new_max_address = self.maximum_address
 
-        remove_size = maximum_address - minimum_address
-        part1_size = minimum_address - self.minimum_address
+        remove_size = new_max_address - new_min_address
+        part1_size = new_min_address - self.minimum_address
         part1_data = self.data[0:part1_size]
         part2_data = self.data[part1_size + remove_size:]
 
@@ -355,17 +355,17 @@ class Segment:
             self.maximum_address = self.minimum_address + part1_size
             self.data = part1_data
 
-            return Segment(maximum_address,
-                           maximum_address + len(part2_data),
+            return Segment(new_max_address,
+                           new_max_address + len(part2_data),
                            part2_data,
                            self.word_size_bytes)
         else:
             # Update this segment.
             if len(part1_data) > 0:
-                self.maximum_address = minimum_address
+                self.maximum_address = new_min_address
                 self.data = part1_data
             elif len(part2_data) > 0:
-                self.minimum_address = maximum_address
+                self.minimum_address = new_max_address
                 self.data = part2_data
             else:
                 self.maximum_address = self.minimum_address
