@@ -69,4 +69,4 @@ def chunked(
 
     total_bytes += (bootattrs.write_size - total_bytes) % bootattrs.write_size
     align = bootattrs.write_size // hexdata.word_size_bytes
-    return total_bytes, hexdata.segments.chunks(chunk_size, align, b"\x00\x00"), debug_parsed_records, debug_segments_before_crop
+    return total_bytes, hexdata.segments.chunks(chunk_size, align, b"\x00\x00"), debug_parsed_records, debug_segments_before_crop, hexdata.segments

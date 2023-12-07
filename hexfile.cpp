@@ -176,7 +176,6 @@ void HexFile::add_ihex(std::vector<std::string> lines)
 
         if (lineType == IHEX_DATA) // Data record
         {
-
             debug_segments.push_back(Segment(
                 lineAddress,
                 lineAddress + lineSize,
@@ -318,6 +317,16 @@ unsigned int HexFile::getMaximumAdressOfLastSegment()
     }
 }
 
+unsigned int HexFile::totalLength() const {
+    unsigned int length = 0;
+    for (const Segment& segment : segments) {
+        length += segment.data.size();
+    }
+    length /= word_size_bytes; // Divise par la taille du mot
+    return length;
+}
+
+
 /// @brief Keep given range and discard the rest.
 /// @param minimum_address is the first word address to keep (including)
 /// @param maximum_address is the last word address to keep (excluding).
@@ -419,9 +428,17 @@ std::vector<Chunk> HexFile::chunked(std::string hexfile, BootAttrs bootattrs)
 
     add_ihex(lines);
 
-    // crop(bootattrs.memory_start, bootattrs.memory_end);
+    // std::cout << "at this point before crop, I have " << segments.size() << " segments" << std::endl;
+    for(unsigned int i = 0; i < segments.size(); i++) {
+        debug_segments_before_crop.push_back(Segment(
+            segments[i].minimum_address, 
+            segments[i].maximum_address,
+            segments[i].data,
+            segments[i].word_size_bytes + 1));
+    }
 
-    //     hexdata.crop(*bootattrs.memory_range)
+    crop(bootattrs.memory_start, bootattrs.memory_end);
+    // std::cout << "at this point after crop, I have " << debug_segments_before_crop.size() << " segments in debug_segments_before_crop" << std::endl;
 
     // chunk_size = bootattrs.max_packet_length - Command.get_size()
     // chunk_size -= chunk_size % bootattrs.write_size
@@ -593,6 +610,7 @@ std::vector<Segment> debugSegmentsFromPython()
         Segment(13296, 13304, hexStringToBytes("00000600ffff3700"), 1)};
 }
 
+// only the second one survive
 std::vector<Segment> debugSegmentsBeforeCropFromPython()
 {
     return std::vector<Segment>{
@@ -627,16 +645,35 @@ TEST_CASE("chunked function addSegments : debug_segment_before_crop")
 
     std::vector<Segment> debugSegmentsBeforeCrop = debugSegmentsBeforeCropFromPython();
 
-    CHECK(hex.segments.size() == debugSegmentsBeforeCrop.size());
+    CHECK(hex.debug_segments_before_crop.size() == debugSegmentsBeforeCrop.size());
 
     for (unsigned int i = 0; i < debugSegmentsBeforeCrop.size(); i++)
     {
-        CHECK(hex.segments[i].minimum_address == debugSegmentsBeforeCrop[i].minimum_address);
-        CHECK(hex.segments[i].maximum_address == debugSegmentsBeforeCrop[i].maximum_address);
-        CHECK(hex.segments[i].data == debugSegmentsBeforeCrop[i].data);
-        CHECK(hex.segments[i].word_size_bytes == debugSegmentsBeforeCrop[i].word_size_bytes);
+        CHECK(hex.debug_segments_before_crop[i].minimum_address == debugSegmentsBeforeCrop[i].minimum_address);
+        CHECK(hex.debug_segments_before_crop[i].maximum_address == debugSegmentsBeforeCrop[i].maximum_address);
+        CHECK(hex.debug_segments_before_crop[i].data == debugSegmentsBeforeCrop[i].data);
+        CHECK(hex.debug_segments_before_crop[i].word_size_bytes == debugSegmentsBeforeCrop[i].word_size_bytes);
     }
 }
+
+TEST_CASE("chunked function crop : only one segment must survive, the second one")
+{
+    BootAttrs bootattrs = defaultBootAttrsForTest();
+
+    HexFile hex;
+    std::vector<Chunk> chunks = hex.chunked(FLASH_HEX_FILE, bootattrs);
+
+    std::vector<Segment> debugSegmentsBeforeCropInPython = debugSegmentsBeforeCropFromPython();
+    Segment cropSurvivorInPython = debugSegmentsBeforeCropInPython[1];
+    CHECK(hex.segments.size() == 1);
+    Segment cropSurvivorInSegments = hex.segments[0];
+
+    CHECK(cropSurvivorInPython.minimum_address == cropSurvivorInPython.minimum_address);
+    CHECK(cropSurvivorInSegments.maximum_address == cropSurvivorInPython.maximum_address);
+    CHECK(cropSurvivorInSegments.data == cropSurvivorInPython.data);
+    CHECK(cropSurvivorInSegments.word_size_bytes == cropSurvivorInPython.word_size_bytes);
+}
+
 
 // TEST_CASE("chunked function")
 // {

@@ -29,6 +29,7 @@ private:
 
 public:
     std::vector<Segment> debug_segments; //this works
+    std::vector<Segment> debug_segments_before_crop;
     std::vector<Segment> segments;
     
     HexFile();
@@ -50,6 +51,8 @@ public:
     std::vector<Chunk> chunked(std::string hexfile, BootAttrs bootattrs);
 
     void add_ihex(std::vector<std::string> records);
+
+    unsigned int totalLength() const;
 };
 
 #endif /* HEXFILE_H */
