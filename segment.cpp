@@ -95,3 +95,9 @@ bool Segment::remove_data(unsigned int new_min_address, unsigned int new_max_add
 
     return isSplitted;
 }
+
+
+std::vector<Chunk> Segment::chunks(unsigned int size, unsigned int alignment, std::vector<uint8_t> padding) {
+
+    return std::vector<Chunk>();
+}

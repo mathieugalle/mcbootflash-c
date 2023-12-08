@@ -392,8 +392,3 @@ typedef struct
     bool has_checksum;
 } BootAttrs;
 
-struct Chunk
-{
-    unsigned int address;
-    std::vector<uint8_t> data;
-};

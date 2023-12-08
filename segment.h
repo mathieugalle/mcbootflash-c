@@ -5,6 +5,13 @@
 #include <cstdint>
 #include <stdexcept>
 
+
+struct Chunk
+{
+    unsigned int address;
+    std::vector<uint8_t> data;
+};
+
 class Segment
 {
 public:
@@ -19,6 +26,8 @@ public:
     void add_data(unsigned int min_addr, unsigned int max_addr, const std::vector<uint8_t> &new_data);
 
     bool remove_data(unsigned int new_min_address, unsigned int new_max_address, Segment &splitSegment);
+
+    std::vector<Chunk> chunks(unsigned int size, unsigned int alignment, std::vector<uint8_t> padding);
 };
 
 #endif /* SEGMENT_H */

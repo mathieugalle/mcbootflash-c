@@ -37,7 +37,7 @@ std::vector<uint8_t> hexStringToBytes(const std::string &str)
     return bytes;
 }
 
-HexFile::HexFile() : current_segment_index(-1), word_size_bytes(0), execution_start_address(0)
+HexFile::HexFile() : current_segment_index(-1), word_size_bytes(0), execution_start_address(0), processed_total_bytes(0)
 {
     // default hexfile constructor
 }
@@ -396,8 +396,6 @@ std::string strip(const std::string &str)
 
 std::vector<Chunk> HexFile::chunked(std::string hexfile, BootAttrs bootattrs)
 {
-    std::vector<Chunk> res;
-
     std::ifstream file(hexfile);
     std::string line;
 
@@ -410,7 +408,7 @@ std::vector<Chunk> HexFile::chunked(std::string hexfile, BootAttrs bootattrs)
     else
     {
         std::cout << "file is NOT open" << std::endl;
-        return res;
+        return std::vector<Chunk>();
     }
 
     word_size_bytes = 1;
@@ -440,25 +438,28 @@ std::vector<Chunk> HexFile::chunked(std::string hexfile, BootAttrs bootattrs)
     crop(bootattrs.memory_start, bootattrs.memory_end);
     // std::cout << "at this point after crop, I have " << debug_segments_before_crop.size() << " segments in debug_segments_before_crop" << std::endl;
 
-    // chunk_size = bootattrs.max_packet_length - Command.get_size()
-    // chunk_size -= chunk_size % bootattrs.write_size
-    // chunk_size //= hexdata.word_size_bytes
-    // total_bytes = len(hexdata) * hexdata.word_size_bytes
-
-    // if total_bytes == 0:
-    //     msg = "HEX file contains no data within program memory range"
-    //     raise ValueError(msg)
-
-    // total_bytes += (bootattrs.write_size - total_bytes) % bootattrs.write_size
-    // align = bootattrs.write_size // hexdata.word_size_bytes
-    // return total_bytes, hexdata.segments.chunks(chunk_size, align, b"\x00\x00"), debug_parsed_records, debug_segments_before_crop
-
     word_size_bytes = 2;
     for (unsigned int i = 0; i < segments.size(); i++)
     {
         segments[i].word_size_bytes = 2;
     }
 
+    unsigned int chunk_size = bootattrs.max_packet_length - Command::getSize();
+    chunk_size -= chunk_size % bootattrs.write_size;
+    chunk_size /= word_size_bytes; // division entière
+    unsigned int total_bytes = totalLength() * word_size_bytes;
+
+    if (total_bytes == 0) {
+        throw std::runtime_error("HEX file contains no data within program memory range");
+    }
+
+    total_bytes += (bootattrs.write_size - total_bytes) % bootattrs.write_size;
+    unsigned int align = bootattrs.write_size / word_size_bytes; //division entière encore
+
+    processed_total_bytes = total_bytes;
+    std::vector<uint8_t> twoBytes{ 0, 0 };
+    std::vector<Chunk> res;
+    // res = chunks(chunk_size, align, twoBytes);
     return res;
 }
 
@@ -675,6 +676,12 @@ TEST_CASE("chunked function crop : only one segment must survive, the second one
 }
 
 
+std::vector<Chunk> HexFile::chunks(unsigned int size, unsigned int alignment, std::vector<uint8_t> padding) {
+
+    
+    return std::vector<Chunk>();
+}
+
 // TEST_CASE("chunked function")
 // {
 //     BootAttrs bootattrs = defaultBootAttrsForTest();
@@ -697,3 +704,5 @@ TEST_CASE("chunked function crop : only one segment must survive, the second one
 //         CHECK(bytesToHexString(chunks[i].data) == results[i].second);
 //     }
 // }
+
+

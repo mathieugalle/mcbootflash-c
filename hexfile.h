@@ -1,8 +1,8 @@
 #ifndef HEXFILE_H
 #define HEXFILE_H
 
-#include "macbootflash-c.cpp"
 #include "segment.h"
+#include "macbootflash-c.cpp"
 
 
 // Intel hex types.
@@ -31,6 +31,7 @@ public:
     std::vector<Segment> debug_segments; //this works
     std::vector<Segment> debug_segments_before_crop;
     std::vector<Segment> segments;
+    unsigned int processed_total_bytes;
     
     HexFile();
     unsigned int crc_ihex(const std::vector<uint8_t> &bytes);
@@ -49,6 +50,8 @@ public:
 
 
     std::vector<Chunk> chunked(std::string hexfile, BootAttrs bootattrs);
+
+    std::vector<Chunk> chunks(unsigned int size, unsigned int alignment, std::vector<uint8_t> padding);
 
     void add_ihex(std::vector<std::string> records);
 
