@@ -6,11 +6,6 @@
 #include <stdexcept>
 
 
-struct Chunk
-{
-    unsigned int address;
-    std::vector<uint8_t> data;
-};
 
 class Segment
 {
@@ -27,7 +22,9 @@ public:
 
     bool remove_data(unsigned int new_min_address, unsigned int new_max_address, Segment &splitSegment);
 
-    std::vector<Chunk> chunks(unsigned int size, unsigned int alignment, std::vector<uint8_t> padding);
+    std::vector<Segment> chunks(unsigned int size, unsigned int alignment, std::vector<uint8_t> padding);
+
+    unsigned int getSize();
 };
 
 #endif /* SEGMENT_H */

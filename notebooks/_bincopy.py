@@ -245,26 +245,51 @@ class Segment:
 
         """
 
+        # print("size ", size)
+        # print("alignement ", alignment)
+        # print("padding " , padding)
+
         if (size % alignment) != 0:
             raise Error(f'size {size} is not a multiple of alignment {alignment}')
 
         if padding and len(padding) != self.word_size_bytes:
             raise Error(f'padding must be a word value (size {self.word_size_bytes}),'
                         f' got {padding}')
-
+        
         size *= self.word_size_bytes
         alignment *= self.word_size_bytes
         address = self.minimum_address
         data = self.data
 
+        # print("zeroth data")
+        # print(len(data))
+        # print(bytes_to_hex_string(data, False))
+        # print("size : ", size)
+
+
         # Apply padding to first and final chunk, if padding is non-empty.
         align_offset = address % alignment
         address -= align_offset * bool(padding)
-        data = align_offset // self.word_size_bytes * padding + data
-        data += (alignment - len(data)) % alignment // self.word_size_bytes * padding
 
+
+        data = align_offset // self.word_size_bytes * padding + data
+
+        # print("data size after adding before : ", len(data))
+
+        # print("alignment : ", alignment)
+        # print("word_size_bytes : ", self.word_size_bytes)
+        # print("len of data : ", len(data))
+        padding_to_add = (alignment - len(data)) % alignment // self.word_size_bytes
+        # print("number of paddings ", padding_to_add)
+        data += padding_to_add * padding
+       
         # First chunk may be non-aligned and shorter than `size` if padding is empty.
         chunk_offset = (address % alignment)
+
+        # print("first data")
+        # print(len(data))
+        # print(bytes_to_hex_string(data, False))
+        # print("size : ", size)
 
         if chunk_offset != 0:
             first_chunk_size = (alignment - chunk_offset)
@@ -277,7 +302,17 @@ class Segment:
         else:
             first_chunk_size = 0
 
+        print("here data")
+        print(len(data))
+        print(bytes_to_hex_string(data, False))
+        print("size : ", size)
+
         for offset in range(0, len(data), size):
+            if offset == 720 or offset == 960:
+                print("offset : ", offset)
+                print("address + offset ", address + offset)
+                print("address + offset + size", address + offset + size)
+                print("data[offset:offset + size] len ", len(data[offset:offset + size]))
             yield Segment(address + offset,
                           address + offset + size,
                           data[offset:offset + size],

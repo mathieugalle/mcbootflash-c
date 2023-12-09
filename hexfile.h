@@ -15,6 +15,13 @@
 
 std::string bytesToHexString(const std::vector<uint8_t> &bytes);
 
+struct Chunk
+{
+    unsigned int address;
+    std::vector<uint8_t> data;
+};
+
+
 class HexFile
 {
 private:
@@ -49,9 +56,9 @@ public:
     void removeSegmentsBetween(unsigned int minimum_address, unsigned int maximum_address);
 
 
-    std::vector<Chunk> chunked(std::string hexfile, BootAttrs bootattrs);
+    std::vector<Segment> chunked(std::string hexfile, BootAttrs bootattrs);
 
-    std::vector<Chunk> chunks(unsigned int size, unsigned int alignment, std::vector<uint8_t> padding);
+    std::vector<Segment> chunks(unsigned int size, unsigned int alignment, std::vector<uint8_t> padding);
 
     void add_ihex(std::vector<std::string> records);
 

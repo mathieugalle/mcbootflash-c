@@ -3,24 +3,11 @@
 #include <vector>
 #include <string>
 #include <fstream>
-#include <iomanip>
-#include <sstream>
-#include <algorithm> //std::remove
 
 #include <stdexcept>
 #include "hexfile.h"
+#include <algorithm> //std::remove
 
-std::string bytesToHexString(const std::vector<uint8_t> &bytes)
-{
-    std::stringstream ss;
-    for (size_t i = 0; i < bytes.size(); ++i)
-    {
-        ss << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(bytes[i]);
-        if (i < bytes.size() - 1)
-            ss << " ";
-    }
-    return ss.str();
-}
 std::vector<uint8_t> hexStringToBytes(const std::string &str)
 {
     std::vector<uint8_t> bytes;
@@ -317,15 +304,16 @@ unsigned int HexFile::getMaximumAdressOfLastSegment()
     }
 }
 
-unsigned int HexFile::totalLength() const {
+unsigned int HexFile::totalLength() const
+{
     unsigned int length = 0;
-    for (const Segment& segment : segments) {
+    for (const Segment &segment : segments)
+    {
         length += segment.data.size();
     }
     length /= word_size_bytes; // Divise par la taille du mot
     return length;
 }
-
 
 /// @brief Keep given range and discard the rest.
 /// @param minimum_address is the first word address to keep (including)
@@ -394,7 +382,7 @@ std::string strip(const std::string &str)
     return str.substr(start, end - start);
 }
 
-std::vector<Chunk> HexFile::chunked(std::string hexfile, BootAttrs bootattrs)
+std::vector<Segment> HexFile::chunked(std::string hexfile, BootAttrs bootattrs)
 {
     std::ifstream file(hexfile);
     std::string line;
@@ -408,7 +396,7 @@ std::vector<Chunk> HexFile::chunked(std::string hexfile, BootAttrs bootattrs)
     else
     {
         std::cout << "file is NOT open" << std::endl;
-        return std::vector<Chunk>();
+        return std::vector<Segment>();
     }
 
     word_size_bytes = 1;
@@ -427,9 +415,10 @@ std::vector<Chunk> HexFile::chunked(std::string hexfile, BootAttrs bootattrs)
     add_ihex(lines);
 
     // std::cout << "at this point before crop, I have " << segments.size() << " segments" << std::endl;
-    for(unsigned int i = 0; i < segments.size(); i++) {
+    for (unsigned int i = 0; i < segments.size(); i++)
+    {
         debug_segments_before_crop.push_back(Segment(
-            segments[i].minimum_address, 
+            segments[i].minimum_address,
             segments[i].maximum_address,
             segments[i].data,
             segments[i].word_size_bytes + 1));
@@ -449,17 +438,22 @@ std::vector<Chunk> HexFile::chunked(std::string hexfile, BootAttrs bootattrs)
     chunk_size /= word_size_bytes; // division entière
     unsigned int total_bytes = totalLength() * word_size_bytes;
 
-    if (total_bytes == 0) {
+    if (total_bytes == 0)
+    {
         throw std::runtime_error("HEX file contains no data within program memory range");
     }
 
     total_bytes += (bootattrs.write_size - total_bytes) % bootattrs.write_size;
-    unsigned int align = bootattrs.write_size / word_size_bytes; //division entière encore
+    unsigned int align = bootattrs.write_size / word_size_bytes; // division entière encore
 
     processed_total_bytes = total_bytes;
-    std::vector<uint8_t> twoBytes{ 0, 0 };
-    std::vector<Chunk> res;
-    // res = chunks(chunk_size, align, twoBytes);
+    std::vector<uint8_t> twoBytes{0, 0};
+
+    std::vector<Segment> res;
+
+    // std::cout << "chunk_size : " << chunk_size << std::endl;
+    // std::cout << "align : " << align << std::endl;
+    res = chunks(chunk_size, align, twoBytes);
     return res;
 }
 
@@ -625,7 +619,7 @@ TEST_CASE("chunked function debug_segments generation")
     BootAttrs bootattrs = defaultBootAttrsForTest();
 
     HexFile hex;
-    std::vector<Chunk> chunks = hex.chunked(FLASH_HEX_FILE, bootattrs);
+    hex.chunked(FLASH_HEX_FILE, bootattrs);
 
     CHECK(hex.debug_segments.size() == 128);
 
@@ -642,7 +636,7 @@ TEST_CASE("chunked function addSegments : debug_segment_before_crop")
     BootAttrs bootattrs = defaultBootAttrsForTest();
 
     HexFile hex;
-    std::vector<Chunk> chunks = hex.chunked(FLASH_HEX_FILE, bootattrs);
+    hex.chunked(FLASH_HEX_FILE, bootattrs);
 
     std::vector<Segment> debugSegmentsBeforeCrop = debugSegmentsBeforeCropFromPython();
 
@@ -662,7 +656,7 @@ TEST_CASE("chunked function crop : only one segment must survive, the second one
     BootAttrs bootattrs = defaultBootAttrsForTest();
 
     HexFile hex;
-    std::vector<Chunk> chunks = hex.chunked(FLASH_HEX_FILE, bootattrs);
+    hex.chunked(FLASH_HEX_FILE, bootattrs);
 
     std::vector<Segment> debugSegmentsBeforeCropInPython = debugSegmentsBeforeCropFromPython();
     Segment cropSurvivorInPython = debugSegmentsBeforeCropInPython[1];
@@ -675,34 +669,142 @@ TEST_CASE("chunked function crop : only one segment must survive, the second one
     CHECK(cropSurvivorInSegments.word_size_bytes == cropSurvivorInPython.word_size_bytes);
 }
 
+std::vector<Segment> HexFile::chunks(unsigned int size, unsigned int alignment, std::vector<uint8_t> padding)
+{
+    if (size % alignment != 0)
+    {
+        throw std::invalid_argument("size is not a multiple of alignment");
+    }
 
-std::vector<Chunk> HexFile::chunks(unsigned int size, unsigned int alignment, std::vector<uint8_t> padding) {
+    if (!padding.empty() && padding.size() != word_size_bytes)
+    {
+        throw std::invalid_argument("padding must be a word value");
+    }
 
-    
-    return std::vector<Chunk>();
+    std::vector<Segment> result;
+    Segment previous(0, 0, {}, word_size_bytes);
+
+    // en supposant que HexFile peut être itéré pour obtenir des Segment
+    for (unsigned int i = 0; i < segments.size(); i++)
+    {
+        Segment &segment = segments[i];
+        std::vector<Segment> segment_chunks = segment.chunks(size, alignment, padding);
+
+        for (unsigned int j = 0; j < segment_chunks.size(); j++)
+        {
+            Segment &chunk = segment_chunks[j];
+            if (chunk.address() < previous.address() + previous.getSize())
+            {
+                // Fusionner les chunks chevauchants
+                std::vector<uint8_t> merged;
+                std::vector<uint8_t> low = std::vector<uint8_t>(
+                    previous.data.end() - alignment * word_size_bytes,
+                    previous.data.end());
+
+                std::vector<uint8_t> high = std::vector<uint8_t>(
+                    chunk.data.begin(),
+                    chunk.data.begin() + alignment * word_size_bytes);
+
+                merged.reserve(alignment * word_size_bytes);
+
+                // ???
+                for (size_t i = 0; i < alignment * word_size_bytes; ++i)
+                {
+                    // XOR des octets et ajout du padding si nécessaire
+                    uint8_t merged_byte = low[i] ^ high[i] ^ (padding.empty() ? 0 : padding[i % padding.size()]);
+                    merged.push_back(merged_byte);
+                }
+
+                chunk.data = std::vector<uint8_t>(merged.begin(), merged.end());
+                chunk.data.insert(chunk.data.end(), chunk.data.begin() + alignment * word_size_bytes, chunk.data.end());
+            }
+            result.push_back(chunk);
+        }
+        // ???
+        previous = segment_chunks.back();
+    }
+
+    return result;
 }
 
-// TEST_CASE("chunked function")
-// {
-//     BootAttrs bootattrs = defaultBootAttrsForTest();
-//     HexFile hex;
+std::vector<Segment> chunksSegmentsResultFromPython()
+{
+    return std::vector<Segment>{
+        Segment(12288, 12528, hexStringToBytes("e01a0400000000000200fa00000f78001e00780000407800674060000080fb00670060004a00dd00020a8000f13f2e008100610001007000000a88000080fa00000006000200fa00000f78001e00780000407800674060000080fb0067006000020a800081ff2f008100610001007000000a88000080fa00000006000000fa004301a8000080fa00000006000000fa000028a9000080fa00000006000200fa00000f78001e00780000407800674060000080fb00670060004a00dd00420a8000f13f2e008100610001007000400a88000080fa00000006000200fa00000f78001e00780000407800674060000080fb00"), 2),
+        Segment(12528, 12768, hexStringToBytes("67006000420a800081ff2f008100610001007000400a88000080fa00000006000000fa004b01a8000080fa00000006000200fa00000f78001e00780000407800674060000080fb00670060004a00dd00820a8000f13f2e008100610001007000800a88000080fa00000006000200fa00000f78001e00780000407800674060000080fb0067006000820a800081ff2f008100610001007000800a88000080fa00000006000000fa005301a8000080fa00000006000000fa0004a8a9000080fa00000006000200fa00000f78001e00780000407800674060000080fb00670060004a00dd00c20a8000f13f2e0081006100"), 2),
+        Segment(12768, 13008, hexStringToBytes("01007000c00a88000080fa00000006000200fa00000f78001e00780000407800674060000080fb0067006000c20a800081ff2f008100610001007000c00a88000080fa00000006000000fa005b01a8000080fa00000006000600fa00004f78001147980012079800230798001e80fb00a1b9260000804000104078000074a1008080fb00f0072000008060007235800001f82f008100610001007000703588001e4090000080fb00a1b9260000804000104078000074a1008080fb00f0072000008060008235800001f82f008100610001007000803588003048070093480700f648070060470700700020004eff0700"), 2),
+        Segment(13008, 13248, hexStringToBytes("7000200071ff07007000200090ff070070002000b3ff070064ff070088ff0700a8ff0700ccff070064ff0700a9ff07001e0090004fff07001e00900072ff07002e00900091ff07002e009000b4ff070050480700b348070016490700804707000080fa00000006000200fa00fb420700004f7800054d07001021a8001e407800e44f500002003a00b24b0700164107001e80fb00a1b9260000804000104078000074a1008080fb00f0072000008060003235800001f82f008100610001007000303588000b4d070010c0b3000080fa00000006000000fa00024d07000643070010c0b3000080fa0000000600f03fb100"), 2),
+        Segment(13248, 13488, hexStringToBytes("0180b10006003500ee03090000000000403fb1000180b100fbff3d001000b000203fb00002003500008009000000000000000600ffff3700"), 2),
+    };
+}
 
-//     std::vector<Chunk> chunks = hex.chunked(FLASH_HEX_FILE, bootattrs);
+TEST_CASE("chunked function all segments")
+{
+    BootAttrs bootattrs = defaultBootAttrsForTest();
+    HexFile hex;
 
-//     std::vector<std::pair<unsigned int, std::string>> results{
-//         std::make_pair(6144, "e0 1a 04 00 00 00 00 00 02 00 fa 00 00 0f 78 00 1e 00 78 00 00 40 78 00 67 40 60 00 00 80 fb 00 67 00 60 00 4a 00 dd 00 02 0a 80 00 f1 3f 2e 00 81 00 61 00 01 00 70 00 00 0a 88 00 00 80 fa 00 00 00 06 00 02 00 fa 00 00 0f 78 00 1e 00 78 00 00 40 78 00 67 40 60 00 00 80 fb 00 67 00 60 00 02 0a 80 00 81 ff 2f 00 81 00 61 00 01 00 70 00 00 0a 88 00 00 80 fa 00 00 00 06 00 00 00 fa 00 43 01 a8 00 00 80 fa 00 00 00 06 00 00 00 fa 00 00 28 a9 00 00 80 fa 00 00 00 06 00 02 00 fa 00 00 0f 78 00 1e 00 78 00 00 40 78 00 67 40 60 00 00 80 fb 00 67 00 60 00 4a 00 dd 00 42 0a 80 00 f1 3f 2e 00 81 00 61 00 01 00 70 00 40 0a 88 00 00 80 fa 00 00 00 06 00 02 00 fa 00 00 0f 78 00 1e 00 78 00 00 40 78 00 67 40 60 00 00 80 fb 00"),
-//         std::make_pair(6264, "67 00 60 00 42 0a 80 00 81 ff 2f 00 81 00 61 00 01 00 70 00 40 0a 88 00 00 80 fa 00 00 00 06 00 00 00 fa 00 4b 01 a8 00 00 80 fa 00 00 00 06 00 02 00 fa 00 00 0f 78 00 1e 00 78 00 00 40 78 00 67 40 60 00 00 80 fb 00 67 00 60 00 4a 00 dd 00 82 0a 80 00 f1 3f 2e 00 81 00 61 00 01 00 70 00 80 0a 88 00 00 80 fa 00 00 00 06 00 02 00 fa 00 00 0f 78 00 1e 00 78 00 00 40 78 00 67 40 60 00 00 80 fb 00 67 00 60 00 82 0a 80 00 81 ff 2f 00 81 00 61 00 01 00 70 00 80 0a 88 00 00 80 fa 00 00 00 06 00 00 00 fa 00 53 01 a8 00 00 80 fa 00 00 00 06 00 00 00 fa 00 04 a8 a9 00 00 80 fa 00 00 00 06 00 02 00 fa 00 00 0f 78 00 1e 00 78 00 00 40 78 00 67 40 60 00 00 80 fb 00 67 00 60 00 4a 00 dd 00 c2 0a 80 00 f1 3f 2e 00 81 00 61 00"),
-//         std::make_pair(6384, "01 00 70 00 c0 0a 88 00 00 80 fa 00 00 00 06 00 02 00 fa 00 00 0f 78 00 1e 00 78 00 00 40 78 00 67 40 60 00 00 80 fb 00 67 00 60 00 c2 0a 80 00 81 ff 2f 00 81 00 61 00 01 00 70 00 c0 0a 88 00 00 80 fa 00 00 00 06 00 00 00 fa 00 5b 01 a8 00 00 80 fa 00 00 00 06 00 06 00 fa 00 00 4f 78 00 11 47 98 00 12 07 98 00 23 07 98 00 1e 80 fb 00 a1 b9 26 00 00 80 40 00 10 40 78 00 00 74 a1 00 80 80 fb 00 f0 07 20 00 00 80 60 00 72 35 80 00 01 f8 2f 00 81 00 61 00 01 00 70 00 70 35 88 00 1e 40 90 00 00 80 fb 00 a1 b9 26 00 00 80 40 00 10 40 78 00 00 74 a1 00 80 80 fb 00 f0 07 20 00 00 80 60 00 82 35 80 00 01 f8 2f 00 81 00 61 00 01 00 70 00 80 35 88 00 30 48 07 00 93 48 07 00 f6 48 07 00 60 47 07 00 70 00 20 00 4e ff 07 00"),
-//         std::make_pair(6504, "70 00 20 00 71 ff 07 00 70 00 20 00 90 ff 07 00 70 00 20 00 b3 ff 07 00 64 ff 07 00 88 ff 07 00 a8 ff 07 00 cc ff 07 00 64 ff 07 00 a9 ff 07 00 1e 00 90 00 4f ff 07 00 1e 00 90 00 72 ff 07 00 2e 00 90 00 91 ff 07 00 2e 00 90 00 b4 ff 07 00 50 48 07 00 b3 48 07 00 16 49 07 00 80 47 07 00 00 80 fa 00 00 00 06 00 02 00 fa 00 fb 42 07 00 00 4f 78 00 05 4d 07 00 10 21 a8 00 1e 40 78 00 e4 4f 50 00 02 00 3a 00 b2 4b 07 00 16 41 07 00 1e 80 fb 00 a1 b9 26 00 00 80 40 00 10 40 78 00 00 74 a1 00 80 80 fb 00 f0 07 20 00 00 80 60 00 32 35 80 00 01 f8 2f 00 81 00 61 00 01 00 70 00 30 35 88 00 0b 4d 07 00 10 c0 b3 00 00 80 fa 00 00 00 06 00 00 00 fa 00 02 4d 07 00 06 43 07 00 10 c0 b3 00 00 80 fa 00 00 00 06 00 f0 3f b1 00"),
-//         std::make_pair(6624, "01 80 b1 00 06 00 35 00 ee 03 09 00 00 00 00 00 40 3f b1 00 01 80 b1 00 fb ff 3d 00 10 00 b0 00 20 3f b0 00 02 00 35 00 00 80 09 00 00 00 00 00 00 00 06 00 ff ff 37 00")};
+    std::vector<Segment> chunks = hex.chunked(FLASH_HEX_FILE, bootattrs);
 
-//     CHECK(chunks.size() == results.size());
+    std::vector<Segment> fromPython = chunksSegmentsResultFromPython();
 
-//     for (unsigned int i = 0; i < chunks.size(); i++)
-//     {
-//         CHECK(chunks[i].address == results[i].first);
-//         CHECK(bytesToHexString(chunks[i].data) == results[i].second);
-//     }
-// }
+    CHECK(chunks.size() == fromPython.size());
+    unsigned int i = 0;
+    for (i = 0; i < chunks.size() ; i++)
+    {
+        // std::cout << "chunk number " << i << std::endl;
+        CHECK(chunks[i].word_size_bytes == fromPython[i].word_size_bytes);
+        CHECK(chunks[i].minimum_address == fromPython[i].minimum_address);
+        CHECK(chunks[i].maximum_address == fromPython[i].maximum_address);
+        CHECK(chunks[i].data == fromPython[i].data);
+    }
+}
 
+TEST_CASE("chunked function last segment")
+{
+    BootAttrs bootattrs = defaultBootAttrsForTest();
+    HexFile hex;
 
+    std::vector<Segment> chunks = hex.chunked(FLASH_HEX_FILE, bootattrs);
+
+    std::vector<Segment> fromPython = chunksSegmentsResultFromPython();
+
+    unsigned int i = chunks.size() - 1;
+    CHECK(chunks[i].word_size_bytes == fromPython[i].word_size_bytes);
+    CHECK(chunks[i].minimum_address == fromPython[i].minimum_address);
+    CHECK(chunks[i].maximum_address == fromPython[i].maximum_address);
+    CHECK(chunks[i].data == fromPython[i].data);
+}
+
+TEST_CASE("Segment.chunked function for last segment")
+{
+    BootAttrs bootattrs = defaultBootAttrsForTest();
+    HexFile hex;
+    hex.chunked(FLASH_HEX_FILE, bootattrs);
+    std::vector<Segment> segments = hex.segments;
+    Segment last = hex.segments[hex.segments.size() - 1];
+
+    // from C++, not sure about this, but first 4 segments were right, so I guess it's good enough
+    unsigned int chunk_size = 120;
+    unsigned int align = 4;
+
+    std::vector<uint8_t> twoBytes{0, 0};
+
+    std::vector<Segment> lastSegmentChunks = last.chunks(chunk_size, align, twoBytes);
+    std::vector<Segment> lastSegmentChunksFromPython = std::vector<Segment>{
+        Segment(12288, 12528, hexStringToBytes("e01a0400000000000200fa00000f78001e00780000407800674060000080fb00670060004a00dd00020a8000f13f2e008100610001007000000a88000080fa00000006000200fa00000f78001e00780000407800674060000080fb0067006000020a800081ff2f008100610001007000000a88000080fa00000006000000fa004301a8000080fa00000006000000fa000028a9000080fa00000006000200fa00000f78001e00780000407800674060000080fb00670060004a00dd00420a8000f13f2e008100610001007000400a88000080fa00000006000200fa00000f78001e00780000407800674060000080fb00"), 2),
+        Segment(12528, 12768, hexStringToBytes("67006000420a800081ff2f008100610001007000400a88000080fa00000006000000fa004b01a8000080fa00000006000200fa00000f78001e00780000407800674060000080fb00670060004a00dd00820a8000f13f2e008100610001007000800a88000080fa00000006000200fa00000f78001e00780000407800674060000080fb0067006000820a800081ff2f008100610001007000800a88000080fa00000006000000fa005301a8000080fa00000006000000fa0004a8a9000080fa00000006000200fa00000f78001e00780000407800674060000080fb00670060004a00dd00c20a8000f13f2e0081006100"), 2),
+        Segment(12768, 13008, hexStringToBytes("01007000c00a88000080fa00000006000200fa00000f78001e00780000407800674060000080fb0067006000c20a800081ff2f008100610001007000c00a88000080fa00000006000000fa005b01a8000080fa00000006000600fa00004f78001147980012079800230798001e80fb00a1b9260000804000104078000074a1008080fb00f0072000008060007235800001f82f008100610001007000703588001e4090000080fb00a1b9260000804000104078000074a1008080fb00f0072000008060008235800001f82f008100610001007000803588003048070093480700f648070060470700700020004eff0700"), 2),
+        Segment(13008, 13248, hexStringToBytes("7000200071ff07007000200090ff070070002000b3ff070064ff070088ff0700a8ff0700ccff070064ff0700a9ff07001e0090004fff07001e00900072ff07002e00900091ff07002e009000b4ff070050480700b348070016490700804707000080fa00000006000200fa00fb420700004f7800054d07001021a8001e407800e44f500002003a00b24b0700164107001e80fb00a1b9260000804000104078000074a1008080fb00f0072000008060003235800001f82f008100610001007000303588000b4d070010c0b3000080fa00000006000000fa00024d07000643070010c0b3000080fa0000000600f03fb100"), 2),
+        Segment(13248, 13488, hexStringToBytes("0180b10006003500ee03090000000000403fb1000180b100fbff3d001000b000203fb00002003500008009000000000000000600ffff3700"), 2),
+    };
+    CHECK(lastSegmentChunks.size() == lastSegmentChunksFromPython.size());
+
+    for (unsigned int i = 0; i < 5; i++)
+    {
+        // std::cout << "chunk number " << i << std::endl;
+        CHECK(lastSegmentChunks[i].word_size_bytes == lastSegmentChunksFromPython[i].word_size_bytes);
+        CHECK(lastSegmentChunks[i].minimum_address == lastSegmentChunksFromPython[i].minimum_address);
+        CHECK(lastSegmentChunks[i].maximum_address == lastSegmentChunksFromPython[i].maximum_address);
+        CHECK(lastSegmentChunks[i].data == lastSegmentChunksFromPython[i].data);
+    }
+}
