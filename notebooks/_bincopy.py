@@ -874,9 +874,11 @@ class BinFile:
             elif type_ == IHEX_EXTENDED_SEGMENT_ADDRESS:
                 extended_segment_address = int(binascii.hexlify(data), 16)
                 extended_segment_address *= 16
+                # print("new extended_segment_address : ", extended_segment_address)
             elif type_ == IHEX_EXTENDED_LINEAR_ADDRESS:
                 extended_linear_address = int(binascii.hexlify(data), 16)
                 extended_linear_address <<= 16
+                # print("new extended linear : ", extended_linear_address)
             elif type_ in [IHEX_START_SEGMENT_ADDRESS, IHEX_START_LINEAR_ADDRESS]:
                 self.execution_start_address = int(binascii.hexlify(data), 16)
             else:

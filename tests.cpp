@@ -242,6 +242,38 @@ TEST_CASE("crc_ihex check 4")
     CHECK(crc == 178);
 }
 
+TEST_CASE("unpack_ihex check if IHEX_DATA")
+{
+    HexFile hex;
+    std::string record(":10000000E01A040000000000041A0000081A0000B2");
+    unsigned int type = 54;
+    unsigned int address = 0;
+    unsigned int size = 0;
+    std::vector<uint8_t> data;
+
+    hex.unpack_ihex(record, type, address, size, data);
+
+    CHECK(type == IHEX_DATA);
+    CHECK(address == 0);
+    CHECK(size == 16);
+    CHECK(bytesToHexString(data) == "e0 1a 04 00 00 00 00 00 04 1a 00 00 08 1a 00 00");
+}
+
+TEST_CASE("unpack_ihex check if IHEX_END_OF_FILE")
+{
+    HexFile hex;
+    std::string record(":00000001FF");
+    unsigned int type = 54;
+    unsigned int address = 0;
+    unsigned int size = 0;
+    std::vector<uint8_t> data;
+
+    hex.unpack_ihex(record, type, address, size, data);
+
+    CHECK(type == IHEX_END_OF_FILE);
+}
+
+
 TEST_CASE("chunked function all segments for vitiapp")
 {
     BootAttrs bootattrs = defaultBootAttrsForTest();
@@ -256,15 +288,9 @@ TEST_CASE("chunked function all segments for vitiapp")
     for (i = 0; i < chunks.size(); i++)
     {
         CHECK(chunks[i].word_size_bytes == fromPython[i].word_size_bytes);
-        // CHECK(chunks[i].minimum_address == fromPython[i].minimum_address);
-        // CHECK(chunks[i].maximum_address == fromPython[i].maximum_address);
+        CHECK(chunks[i].minimum_address == fromPython[i].minimum_address);
+        CHECK(chunks[i].maximum_address == fromPython[i].maximum_address);
         CHECK(chunks[i].data == fromPython[i].data);
-        if (chunks[i].minimum_address != fromPython[i].minimum_address || chunks[i].maximum_address != fromPython[i].maximum_address)
-        {
-            std::cout << "chunk number " << i << std::endl;
-            std::cout << "minimum_address is  " << chunks[i].minimum_address << " but should be " << fromPython[i].minimum_address << std::endl;
-            std::cout << "maximum_address is  " << chunks[i].maximum_address << " but should be " << fromPython[i].maximum_address << std::endl;
-        }
     }
 }
 
@@ -389,35 +415,4 @@ TEST_CASE("Segment.chunked function for last segment")
         CHECK(lastSegmentChunks[i].maximum_address == lastSegmentChunksFromPython[i].maximum_address);
         CHECK(lastSegmentChunks[i].data == lastSegmentChunksFromPython[i].data);
     }
-}
-
-TEST_CASE("unpack_ihex check if IHEX_DATA")
-{
-    HexFile hex;
-    std::string record(":10000000E01A040000000000041A0000081A0000B2");
-    unsigned int type = 54;
-    unsigned int address = 0;
-    unsigned int size = 0;
-    std::vector<uint8_t> data;
-
-    hex.unpack_ihex(record, type, address, size, data);
-
-    CHECK(type == IHEX_DATA);
-    CHECK(address == 0);
-    CHECK(size == 16);
-    CHECK(bytesToHexString(data) == "e0 1a 04 00 00 00 00 00 04 1a 00 00 08 1a 00 00");
-}
-
-TEST_CASE("unpack_ihex check if IHEX_END_OF_FILE")
-{
-    HexFile hex;
-    std::string record(":00000001FF");
-    unsigned int type = 54;
-    unsigned int address = 0;
-    unsigned int size = 0;
-    std::vector<uint8_t> data;
-
-    hex.unpack_ihex(record, type, address, size, data);
-
-    CHECK(type == IHEX_END_OF_FILE);
 }

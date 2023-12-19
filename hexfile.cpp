@@ -98,6 +98,8 @@ void HexFile::add_ihex(std::vector<std::string> lines)
         std::vector<uint8_t> lineData;
         unpack_ihex(line, lineType, lineAddress, lineSize, lineData);
 
+        lineAddress += extended_linear_address + extended_segment_address;
+
         if (lineType == IHEX_DATA) // Data record
         {
             debug_segments.push_back(Segment(
@@ -393,8 +395,6 @@ std::vector<Segment> HexFile::chunked(std::string hexfile, BootAttrs bootattrs)
     res = chunks(chunk_size, align, twoBytes);
     return res;
 }
-
-
 
 std::vector<Segment> HexFile::chunks(unsigned int size, unsigned int alignment, std::vector<uint8_t> padding)
 {
