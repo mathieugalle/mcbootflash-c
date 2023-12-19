@@ -1,12 +1,12 @@
 CXX=g++
 CXXFLAGS=-std=c++11 -Wall
-TARGET=build/macbootflash_test
+TARGET=build/mcbootflash_test
 
 all: $(TARGET)
 
-$(TARGET): macbootflash-cpp.cpp hexfile.cpp segment.cpp tests.cpp
+$(TARGET): mcbootflash-cpp.cpp hexfile.cpp segment.cpp tests.cpp
 	mkdir -p build
-	$(CXX) $(CXXFLAGS) -o $(TARGET) macbootflash-cpp.cpp hexfile.cpp segment.cpp tests.cpp
+	$(CXX) $(CXXFLAGS) -o $(TARGET) mcbootflash-cpp.cpp hexfile.cpp segment.cpp tests.cpp
 
 clean:
 	rm -rf build
