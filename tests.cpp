@@ -5,8 +5,8 @@
 
 
 
-#define FLASH_HEX_FILE "/home/yoctouser/mcbootflash-c/mcbootflash/tests/testcases/flash/test.hex"
-#define FLASH_HEX_FILE_VITIAPP "/home/yoctouser/mcbootflash-c/mcbootflash/tests/testcases/flash/VitiAppDelivery.X.production.hex"
+#define FLASH_HEX_FILE "/home/yoctouser/mcbootflash-cpp/mcbootflash/tests/testcases/flash/test.hex"
+#define FLASH_HEX_FILE_VITIAPP "/home/yoctouser/mcbootflash-cpp/mcbootflash/tests/testcases/flash/VitiAppDelivery.X.production.hex"
 
 BootAttrs defaultBootAttrsForTest()
 {

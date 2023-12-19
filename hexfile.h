@@ -2,7 +2,7 @@
 #define HEXFILE_H
 
 #include "segment.h"
-#include "macbootflash-c.cpp"
+#include "macbootflash-cpp.cpp"
 
 
 // Intel hex types.
