@@ -24,7 +24,6 @@ std::string arrayToHexString(const std::array<uint8_t, N> &arr)
     return ss.str();
 }
 
-
 /// @brief Sent by the bootloader in response to a command.
 enum ResponseCode
 {
@@ -264,17 +263,19 @@ private:
 public:
     MemoryRange(
         uint8_t command,
+        uint32_t program_start,
+        uint32_t program_end,
         uint16_t data_length = 0,
         uint32_t unlock_sequence = 0,
         uint32_t address = 0,
         ResponseCode success = ResponseCode::UNSUPPORTED_COMMAND)
-        : Response(command, data_length, unlock_sequence, address, success), program_start(0), program_end(0)
+        : Response(command, data_length, unlock_sequence, address, success), program_start(program_start), program_end(program_end)
     {
     }
-    std::array<uint8_t, 18> toBytes() const
+    std::array<uint8_t, 20> toBytes() const
     {
         std::array<uint8_t, 12> baseBuffer = Response::toBytes();
-        std::array<uint8_t, 18> buffer;
+        std::array<uint8_t, 20> buffer;
         // destination : buffer. source : baseBuffer, nombre à copier : size
         memcpy(buffer.data(), baseBuffer.data(), baseBuffer.size());
         // Copier program_start dans buffer
@@ -283,7 +284,7 @@ public:
         memcpy(buffer.data() + baseBuffer.size() + sizeof(program_start), &program_end, sizeof(program_end));
         return buffer;
     }
-    void fromBytes(const std::array<uint8_t, 18> &buffer)
+    void fromBytes(const std::array<uint8_t, 20> &buffer)
     {
         std::array<uint8_t, 12> baseBuffer;
         // Copier les premiers 12 octets de buffer dans baseBuffer
@@ -304,13 +305,19 @@ public:
 
 TEST_CASE("MemoryRange class")
 {
-    Response r((uint8_t)ResponseCode::BAD_LENGTH);
-    CHECK(arrayToHexString(r.toBytes()) == "fd 00 00 00 00 00 00 00 00 00 00 ff");
+    MemoryRange r((uint8_t)ResponseCode::BAD_LENGTH, 0, 0);
+    CHECK(arrayToHexString(r.toBytes()) == "fd 00 00 00 00 00 00 00 00 00 00 ff 00 00 00 00 00 00 00 00");
 }
 TEST_CASE("MemoryRange class 2")
 {
-    Response r((uint8_t)ResponseCode::BAD_ADDRESS);
-    CHECK(arrayToHexString(r.toBytes()) == "fe 00 00 00 00 00 00 00 00 00 00 ff");
+    MemoryRange r((uint8_t)ResponseCode::BAD_ADDRESS, 0, 0);
+    CHECK(arrayToHexString(r.toBytes()) == "fe 00 00 00 00 00 00 00 00 00 00 ff 00 00 00 00 00 00 00 00");
+}
+
+TEST_CASE("MemoryRange success")
+{
+    MemoryRange r((uint8_t)ResponseCode::SUCCESS,422, 788);
+    CHECK(arrayToHexString(r.toBytes()) == "01 00 00 00 00 00 00 00 00 00 00 ff a6 01 00 00 14 03 00 00");
 }
 
 class Checksum : public Response
@@ -391,4 +398,3 @@ typedef struct
     int memory_end;
     bool has_checksum;
 } BootAttrs;
-
