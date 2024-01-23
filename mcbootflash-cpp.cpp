@@ -272,6 +272,9 @@ public:
         : Response(command, data_length, unlock_sequence, address, success), program_start(program_start), program_end(program_end)
     {
     }
+    uint32_t getProgramStart() const { return program_start; }
+    uint32_t getProgramEnd() const { return program_end; }
+
     std::array<uint8_t, 20> toBytes() const
     {
         std::array<uint8_t, 12> baseBuffer = Response::toBytes();
@@ -301,6 +304,11 @@ public:
     {
         return Response::getSize() + sizeof(program_start) + sizeof(program_end);
     }
+    void print() const
+    {
+        std::cout << "Program Start: " << program_start << std::endl;
+        std::cout << "Program End: " << program_end << std::endl;
+    }
 };
 
 TEST_CASE("MemoryRange class")
@@ -316,9 +324,17 @@ TEST_CASE("MemoryRange class 2")
 
 TEST_CASE("MemoryRange success")
 {
-    MemoryRange r((uint8_t)ResponseCode::SUCCESS,422, 788);
+    MemoryRange r((uint8_t)ResponseCode::SUCCESS, 422, 788);
     CHECK(arrayToHexString(r.toBytes()) == "01 00 00 00 00 00 00 00 00 00 00 ff a6 01 00 00 14 03 00 00");
 }
+
+// TEST_CASE("MemoryRange from bytes success")
+// {
+//     MemoryRange r((uint8_t)ResponseCode::SUCCESS, 0, 0);
+
+//     r.fromBytes(hexStringToBytes(std::string("01 00 00 00 00 00 00 00 00 00 00 ff a6 01 00 00 14 03 00 00")));
+//     CHECK(arrayToHexString(r.toBytes()) ==);
+// }
 
 class Checksum : public Response
 {
