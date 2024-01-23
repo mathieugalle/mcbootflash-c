@@ -1438,6 +1438,11 @@ class BinFile:
         minimum_address *= self.word_size_bytes
         maximum_address *= self.word_size_bytes
         maximum_address_address = self._segments.maximum_address
+
+        # print("maximum_address_address : ", maximum_address_address)
+        # print("minimum_address : ", minimum_address)
+        # print("maximum_address : ", maximum_address)
+        # print("self.word_size_bytes : ", self.word_size_bytes)
         self._segments.remove(0, minimum_address)
         self._segments.remove(maximum_address, maximum_address_address)
 

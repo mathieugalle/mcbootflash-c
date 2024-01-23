@@ -264,6 +264,11 @@ void HexFile::crop(unsigned int minimum_address, unsigned int maximum_address)
     maximum_address *= word_size_bytes;
     unsigned int current_address_address = getMaximumAdressOfLastSegment();
 
+    // std::cout << "current_address_address " << current_address_address << std::endl;
+    // std::cout << "minimum_address " << minimum_address << std::endl;
+    // std::cout << "maximum_address " << maximum_address << std::endl;
+    // std::cout << "word_size_bytes " << word_size_bytes << std::endl;
+
     removeSegmentsBetween(0, minimum_address);
     removeSegmentsBetween(maximum_address, current_address_address);
 }
@@ -362,15 +367,14 @@ std::vector<Segment> HexFile::chunked(std::string hexfile, BootAttrs bootattrs)
             segments[i].data,
             segments[i].word_size_bytes + 1));
     }
-
-    crop(bootattrs.memory_start, bootattrs.memory_end);
-    // std::cout << "at this point after crop, I have " << debug_segments_before_crop.size() << " segments in debug_segments_before_crop" << std::endl;
-
     word_size_bytes = 2;
     for (unsigned int i = 0; i < segments.size(); i++)
     {
         segments[i].word_size_bytes = 2;
     }
+
+    crop(bootattrs.memory_start, bootattrs.memory_end);
+    // std::cout << "at this point after crop, I have " << debug_segments_before_crop.size() << " segments in debug_segments_before_crop" << std::endl;
 
     unsigned int chunk_size = bootattrs.max_packet_length - Command::getSize();
     chunk_size -= chunk_size % bootattrs.write_size;
